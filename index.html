@@ -1,0 +1,978 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <title>Karar Motoru</title>
+
+  <!-- iOS Tam Ekran (PWA) Meta Etiketleri -->
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Karar Motoru" />
+  <meta name="theme-color" content="#090A0F" />
+
+  <!-- Uygulama İkonu (iPhone Ana Ekranı İçin Otomatik SVG İkon) -->
+  <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%23090A0F'/><circle cx='50' cy='50' r='36' fill='none' stroke='%2300F5D4' stroke-width='6'/><circle cx='50' cy='50' r='14' fill='%23FF2A85'/></svg>" />
+
+  <style>
+    :root {
+      --bg: #090A0F;
+      --card: #141724;
+      --border: rgba(255, 255, 255, 0.08);
+      --accent: #00F5D4;
+      --pink: #FF2A85;
+      --purple: #8A2BE2;
+      --text: #F8FAFC;
+      --muted: #94A3B8;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-touch-callout: none;
+      -webkit-user-select: none;
+      user-select: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, sans-serif;
+    }
+
+    #app {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      padding-top: env(safe-area-inset-top, 20px);
+      padding-bottom: calc(env(safe-area-inset-bottom, 16px) + 68px);
+    }
+
+    /* Üst Başlık */
+    header {
+      padding: 12px 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid var(--border);
+      z-index: 10;
+    }
+
+    header h1 {
+      font-size: 19px;
+      font-weight: 800;
+      letter-spacing: -0.4px;
+      background: linear-gradient(90deg, var(--accent), var(--pink));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .sound-btn {
+      background: var(--card);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 6px 12px;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    /* Sekme İçerikleri */
+    .tab-view {
+      display: none;
+      flex: 1;
+      position: relative;
+      overflow-y: auto;
+    }
+
+    .tab-view.active {
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* 1. PARMAK RULETİ */
+    #touch-area {
+      flex: 1;
+      width: 100%;
+      height: 100%;
+      position: relative;
+      touch-action: none;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+
+    .touch-hint {
+      text-align: center;
+      pointer-events: none;
+      padding: 24px;
+      transition: opacity 0.25s;
+    }
+
+    .touch-hint h2 {
+      font-size: 24px;
+      margin-bottom: 8px;
+      font-weight: 800;
+    }
+
+    .touch-hint p {
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.4;
+    }
+
+    .countdown-badge {
+      position: absolute;
+      top: 24px;
+      font-size: 44px;
+      font-weight: 900;
+      color: var(--accent);
+      text-shadow: 0 0 24px rgba(0, 245, 212, 0.6);
+      pointer-events: none;
+      opacity: 0;
+      transform: scale(0.8);
+      transition: all 0.2s;
+    }
+
+    .countdown-badge.show {
+      opacity: 1;
+      transform: scale(1);
+    }
+
+    .finger-node {
+      position: absolute;
+      width: 110px;
+      height: 110px;
+      margin-left: -55px;
+      margin-top: -55px;
+      border-radius: 50%;
+      pointer-events: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: 4px solid var(--color);
+      box-shadow: 0 0 30px var(--color), inset 0 0 18px var(--color);
+      animation: pulseFinger 0.9s infinite alternate ease-in-out;
+      transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.3s;
+    }
+
+    .finger-node::after {
+      content: '';
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      background: var(--color);
+      opacity: 0.85;
+    }
+
+    .finger-node.winner {
+      transform: scale(1.65) !important;
+      z-index: 50;
+      box-shadow: 0 0 60px var(--color), 0 0 110px var(--color), inset 0 0 30px #fff;
+      background: rgba(255, 255, 255, 0.12);
+    }
+
+    .finger-node.loser {
+      transform: scale(0.2) !important;
+      opacity: 0 !important;
+    }
+
+    @keyframes pulseFinger {
+      from { transform: scale(0.92); }
+      to { transform: scale(1.08); }
+    }
+
+    /* 2. KARAR ÇARKI */
+    .wheel-wrapper {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 18px;
+    }
+
+    .preset-bar {
+      display: flex;
+      gap: 8px;
+      width: 100%;
+      overflow-x: auto;
+      padding-bottom: 4px;
+      scrollbar-width: none;
+    }
+
+    .preset-bar::-webkit-scrollbar { display: none; }
+
+    .chip {
+      background: var(--card);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 8px 14px;
+      border-radius: 18px;
+      font-size: 13px;
+      font-weight: 600;
+      white-space: nowrap;
+      cursor: pointer;
+    }
+
+    .chip.active {
+      background: rgba(0, 245, 212, 0.15);
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    .wheel-stage {
+      position: relative;
+      width: min(76vw, 310px);
+      height: min(76vw, 310px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 6px 0;
+    }
+
+    .wheel-pointer {
+      position: absolute;
+      top: -12px;
+      z-index: 20;
+      width: 0;
+      height: 0;
+      border-left: 14px solid transparent;
+      border-right: 14px solid transparent;
+      border-top: 26px solid var(--pink);
+      filter: drop-shadow(0 4px 10px rgba(255, 42, 133, 0.6));
+    }
+
+    canvas#wheelCanvas {
+      width: 100%;
+      height: 100%;
+      border-radius: 50%;
+      box-shadow: 0 0 35px rgba(0, 0, 0, 0.7);
+    }
+
+    .wheel-result {
+      font-size: 20px;
+      font-weight: 800;
+      min-height: 28px;
+      text-align: center;
+      color: var(--accent);
+    }
+
+    .controls-box {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .add-row {
+      display: flex;
+      gap: 8px;
+    }
+
+    .add-row input {
+      flex: 1;
+      background: var(--card);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 10px 14px;
+      border-radius: 12px;
+      font-size: 14px;
+      outline: none;
+      -webkit-user-select: text;
+      user-select: text;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, var(--accent), #00BBF9);
+      color: #050608;
+      border: none;
+      padding: 13px 20px;
+      border-radius: 14px;
+      font-size: 16px;
+      font-weight: 800;
+      cursor: pointer;
+      width: 100%;
+      box-shadow: 0 6px 20px rgba(0, 245, 212, 0.25);
+    }
+
+    .btn-secondary {
+      background: var(--card);
+      color: var(--text);
+      border: 1px solid var(--border);
+      padding: 10px 16px;
+      border-radius: 12px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    /* 3. ZAR & YAZI TURA */
+    .quick-wrapper {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      padding: 16px 18px;
+      justify-content: center;
+    }
+
+    .game-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 22px;
+      padding: 16px 18px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .card-header-row {
+      width: 100%;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .mode-switch {
+      display: flex;
+      background: var(--bg);
+      padding: 3px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+    }
+
+    .mode-btn {
+      background: transparent;
+      border: none;
+      color: var(--muted);
+      padding: 6px 12px;
+      border-radius: 9px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .mode-btn.active {
+      background: var(--accent);
+      color: #050608;
+    }
+
+    .coin-circle {
+      width: 96px;
+      height: 96px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #FFD166, #F77F00);
+      border: 5px solid #FFF3B0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 22px;
+      font-weight: 900;
+      color: #1E1B18;
+      box-shadow: 0 8px 25px rgba(247, 127, 0, 0.35);
+      transition: transform 0.6s cubic-bezier(0.2, 0.8, 0.2, 1);
+    }
+
+    .dice-row {
+      display: flex;
+      gap: 20px;
+      align-items: center;
+      justify-content: center;
+      min-height: 86px;
+    }
+
+    /* Gerçek Zar Görünümü (3x3 Grid Noktalı) */
+    .die-box {
+      width: 82px;
+      height: 82px;
+      background: linear-gradient(145deg, #FFFFFF, #E2E8F0);
+      border-radius: 18px;
+      padding: 12px;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      grid-template-rows: repeat(3, 1fr);
+      gap: 4px;
+      box-shadow: 0 8px 20px rgba(0,0,0,0.45), inset 0 2px 4px #FFF;
+      transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+
+    .die-box.hidden {
+      display: none;
+    }
+
+    .pip {
+      width: 13px;
+      height: 13px;
+      border-radius: 50%;
+      background: #090A0F;
+      align-self: center;
+      justify-self: center;
+      opacity: 0;
+      transform: scale(0.5);
+      transition: opacity 0.15s, transform 0.15s;
+    }
+
+    .pip.show {
+      opacity: 1;
+      transform: scale(1);
+    }
+
+    /* Zarın 1 gelmesi durumunda ortadaki tek noktayı kırmızı/pembe yap */
+    .die-box[data-val="1"] .pip.pos-4 {
+      background: var(--pink);
+      width: 17px;
+      height: 17px;
+    }
+
+    .dice-total {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--accent);
+      min-height: 18px;
+    }
+
+    /* Alt Navigasyon Barı */
+    nav.bottom-nav {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: calc(64px + env(safe-area-inset-bottom, 12px));
+      padding-bottom: env(safe-area-inset-bottom, 12px);
+      background: rgba(20, 23, 36, 0.92);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border-top: 1px solid var(--border);
+      display: flex;
+      justify-content: space-around;
+      align-items: center;
+      z-index: 100;
+    }
+
+    .nav-item {
+      background: none;
+      border: none;
+      color: var(--muted);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      flex: 1;
+      padding: 8px 0;
+    }
+
+    .nav-item.active {
+      color: var(--accent);
+    }
+
+    .nav-item span.icon {
+      font-size: 20px;
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <header>
+      <h1>KARAR MOTORU</h1>
+      <button class="sound-btn" id="soundToggle">🔊 Ses Açık</button>
+    </header>
+
+    <!-- SEKME 1: PARMAK RULETİ -->
+    <section id="tab-roulette" class="tab-view active">
+      <div id="touch-area">
+        <div class="countdown-badge" id="rouletteTimer">3</div>
+        <div class="touch-hint" id="rouletteHint">
+          <h2>Parmak Ruleti</h2>
+          <p>Masadaki herkes aynı anda ekrana bir parmağını bassın ve beklesin.<br/>3 saniye sonunda 1 kişi seçilecek!</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- SEKME 2: KARAR ÇARKI -->
+    <section id="tab-wheel" class="tab-view">
+      <div class="wheel-wrapper">
+        <div class="preset-bar">
+          <button class="chip active" onclick="loadPreset('yemek', this)">🍔 Ne Yesek?</button>
+          <button class="chip" onclick="loadPreset('hesap', this)">💸 Hesap Kimde?</button>
+          <button class="chip" onclick="loadPreset('aktivite', this)">🎬 Ne Yapsak?</button>
+          <button class="chip" onclick="loadPreset('parti', this)">🔥 Cezalı</button>
+        </div>
+
+        <div class="wheel-stage">
+          <div class="wheel-pointer"></div>
+          <canvas id="wheelCanvas" width="600" height="600"></canvas>
+        </div>
+
+        <div class="wheel-result" id="wheelResult">Çevirmek için butona bas!</div>
+
+        <div class="controls-box">
+          <div class="add-row">
+            <input type="text" id="newOptionInput" placeholder="Yeni seçenek ekle..." />
+            <button class="btn-secondary" onclick="addWheelOption()">+ Ekle</button>
+            <button class="btn-secondary" onclick="clearWheelOptions()">Sıfırla</button>
+          </div>
+          <button class="btn-primary" onclick="spinWheel()">ÇARKI ÇEVİR</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- SEKME 3: ZAR & YAZI-TURA -->
+    <section id="tab-quick" class="tab-view">
+      <div class="quick-wrapper">
+        <!-- Yazı Tura Kartı -->
+        <div class="game-card">
+          <h3>Yazı - Tura</h3>
+          <div class="coin-circle" id="coinBox">TURA</div>
+          <button class="btn-primary" onclick="flipCoin()">PARA AT</button>
+        </div>
+
+        <!-- Tek / Çift Zar Kartı -->
+        <div class="game-card">
+          <div class="card-header-row">
+            <h3>Zar At</h3>
+            <div class="mode-switch">
+              <button class="mode-btn" id="btnSingleDie" onclick="setDiceCount(1)">Tek Zar</button>
+              <button class="mode-btn active" id="btnDoubleDie" onclick="setDiceCount(2)">Çift Zar</button>
+            </div>
+          </div>
+
+          <div class="dice-row">
+            <div class="die-box" id="die1" data-val="6"></div>
+            <div class="die-box" id="die2" data-val="6"></div>
+          </div>
+
+          <div class="dice-total" id="diceTotalText">Toplam: 12</div>
+          <button class="btn-primary" onclick="rollDice()">ZAR SALLA</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ALT MENÜ -->
+    <nav class="bottom-nav">
+      <button class="nav-item active" onclick="switchTab('tab-roulette', this)">
+        <span class="icon">👆</span>
+        <span>Parmak Ruleti</span>
+      </button>
+      <button class="nav-item" onclick="switchTab('tab-wheel', this)">
+        <span class="icon">🎡</span>
+        <span>Karar Çarkı</span>
+      </button>
+      <button class="nav-item" onclick="switchTab('tab-quick', this)">
+        <span class="icon">🎲</span>
+        <span>Zar & Para</span>
+      </button>
+    </nav>
+  </div>
+
+  <script>
+    /* ==========================================
+       1. WEB AUDIO SES MOTORU (Dosyasız Sentetik Ses)
+       ========================================== */
+    let soundEnabled = true;
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    let audioCtx = null;
+
+    function initAudio() {
+      if (!audioCtx) audioCtx = new AudioCtx();
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+    }
+
+    function playTone(freq = 440, duration = 0.06, type = 'sine', gainVal = 0.15) {
+      if (!soundEnabled) return;
+      initAudio();
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = type;
+      osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+      gain.gain.setValueAtTime(gainVal, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start();
+      osc.stop(audioCtx.currentTime + duration);
+    }
+
+    function playWinSound() {
+      [523.25, 659.25, 783.99, 1046.5].forEach((f, idx) => {
+        setTimeout(() => playTone(f, 0.18, 'triangle', 0.25), idx * 90);
+      });
+    }
+
+    document.getElementById('soundToggle').addEventListener('click', (e) => {
+      soundEnabled = !soundEnabled;
+      e.target.textContent = soundEnabled ? '🔊 Ses Açık' : '🔇 Sessiz';
+    });
+
+    /* Sekme Değiştirme */
+    function switchTab(tabId, btn) {
+      playTone(320, 0.04, 'sine', 0.08);
+      document.querySelectorAll('.tab-view').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
+      document.getElementById(tabId).classList.add('active');
+      btn.classList.add('active');
+      if (tabId === 'tab-wheel') drawWheel();
+    }
+
+    /* ==========================================
+       2. PARMAK RULETİ (MULTI-TOUCH)
+       ========================================== */
+    const touchArea = document.getElementById('touch-area');
+    const rouletteHint = document.getElementById('rouletteHint');
+    const rouletteTimer = document.getElementById('rouletteTimer');
+    const NEON_COLORS = ['#00F5D4', '#FF2A85', '#FEE440', '#00BBF9', '#9B5DE5', '#FB5607', '#38B000', '#FF006E'];
+
+    let activeTouches = new Map();
+    let countdownInterval = null;
+    let countdownSeconds = 3;
+    let isLockedWinner = false;
+
+    function resetRouletteTimer() {
+      clearInterval(countdownInterval);
+      countdownInterval = null;
+      rouletteTimer.classList.remove('show');
+
+      if (activeTouches.size >= 2 && !isLockedWinner) {
+        countdownSeconds = 3;
+        rouletteTimer.textContent = countdownSeconds;
+        rouletteTimer.classList.add('show');
+
+        countdownInterval = setInterval(() => {
+          countdownSeconds--;
+          if (countdownSeconds > 0) {
+            rouletteTimer.textContent = countdownSeconds;
+            playTone(220, 0.09, 'sine', 0.2);
+          } else {
+            clearInterval(countdownInterval);
+            selectFingerWinner();
+          }
+        }, 1000);
+      }
+    }
+
+    function selectFingerWinner() {
+      isLockedWinner = true;
+      const keys = Array.from(activeTouches.keys());
+      if (keys.length === 0) return;
+      const randomKey = keys[Math.floor(Math.random() * keys.length)];
+      rouletteTimer.textContent = "SEÇİLDİ!";
+      playWinSound();
+
+      activeTouches.forEach((el, key) => {
+        if (key === randomKey) {
+          el.classList.add('winner');
+        } else {
+          el.classList.add('loser');
+        }
+      });
+
+      setTimeout(() => {
+        activeTouches.forEach(el => el.remove());
+        activeTouches.clear();
+        isLockedWinner = false;
+        rouletteTimer.classList.remove('show');
+        rouletteHint.style.opacity = '1';
+      }, 2700);
+    }
+
+    touchArea.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      if (isLockedWinner) return;
+      initAudio();
+
+      const rect = touchArea.getBoundingClientRect();
+      for (let i = 0; i < e.changedTouches.length; i++) {
+        const t = e.changedTouches[i];
+        const color = NEON_COLORS[activeTouches.size % NEON_COLORS.length];
+        const node = document.createElement('div');
+        node.className = 'finger-node';
+        node.style.setProperty('--color', color);
+        node.style.left = (t.clientX - rect.left) + 'px';
+        node.style.top = (t.clientY - rect.top) + 'px';
+        touchArea.appendChild(node);
+        activeTouches.set(t.identifier, node);
+        playTone(300 + activeTouches.size * 60, 0.07, 'triangle', 0.15);
+      }
+
+      rouletteHint.style.opacity = activeTouches.size > 0 ? '0.12' : '1';
+      resetRouletteTimer();
+    }, { passive: false });
+
+    touchArea.addEventListener('touchmove', (e) => {
+      e.preventDefault();
+      if (isLockedWinner) return;
+      const rect = touchArea.getBoundingClientRect();
+      for (let i = 0; i < e.changedTouches.length; i++) {
+        const t = e.changedTouches[i];
+        const node = activeTouches.get(t.identifier);
+        if (node) {
+          node.style.left = (t.clientX - rect.left) + 'px';
+          node.style.top = (t.clientY - rect.top) + 'px';
+        }
+      }
+    }, { passive: false });
+
+    function handleTouchEnd(e) {
+      e.preventDefault();
+      if (isLockedWinner) return;
+      for (let i = 0; i < e.changedTouches.length; i++) {
+        const t = e.changedTouches[i];
+        const node = activeTouches.get(t.identifier);
+        if (node) {
+          node.remove();
+          activeTouches.delete(t.identifier);
+        }
+      }
+      rouletteHint.style.opacity = activeTouches.size > 0 ? '0.12' : '1';
+      resetRouletteTimer();
+    }
+
+    touchArea.addEventListener('touchend', handleTouchEnd, { passive: false });
+    touchArea.addEventListener('touchcancel', handleTouchEnd, { passive: false });
+
+    /* ==========================================
+       3. KARAR ÇARKI (CANVAS + MEKANİK SES)
+       ========================================== */
+    const PRESETS = {
+      yemek: ['Burger', 'Pizza', 'Kebap / Dürüm', 'Tavuk Pilav', 'Makarna', 'Ev Yemeği', 'Sushi / Asya'],
+      hesap: ['Solundaki Ödesin', 'Alman Usulü', 'En Son Gelen', 'Çarkı Çeviren', 'Taş-Kağıt-Makas', 'En Çok Yiyen'],
+      aktivite: ['Sinema / Film', 'Kahve & Sohbet', 'Sahil Yürüyüşü', 'Masa Oyunu / Kutu', 'Gece Sürüşü', 'Oyun Gecesi'],
+      parti: ['Son Mesajını Oku', '1 Dakika Göz Teması', 'Galerideki 5. Foto', 'Birine Arama Yap', 'Taklit Yap', 'Pas Geç!']
+    };
+
+    let wheelOptions = JSON.parse(localStorage.getItem('savedWheel')) || [...PRESETS.yemek];
+    let currentAngle = 0;
+    let isSpinning = false;
+    const canvas = document.getElementById('wheelCanvas');
+    const ctx = canvas.getContext('2d');
+
+    function drawWheel() {
+      const cx = canvas.width / 2;
+      const cy = canvas.height / 2;
+      const radius = cx - 12;
+      const sliceAngle = (2 * Math.PI) / wheelOptions.length;
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      wheelOptions.forEach((opt, i) => {
+        const start = currentAngle + i * sliceAngle;
+        const end = start + sliceAngle;
+
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        ctx.arc(cx, cy, radius, start, end);
+        ctx.closePath();
+        ctx.fillStyle = NEON_COLORS[i % NEON_COLORS.length];
+        ctx.fill();
+        ctx.lineWidth = 4;
+        ctx.strokeStyle = '#090A0F';
+        ctx.stroke();
+
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.rotate(start + sliceAngle / 2);
+        ctx.textAlign = 'right';
+        ctx.fillStyle = '#090A0F';
+        ctx.font = '800 24px -apple-system, sans-serif';
+        ctx.fillText(opt.slice(0, 16), radius - 26, 8);
+        ctx.restore();
+      });
+
+      ctx.beginPath();
+      ctx.arc(cx, cy, 34, 0, 2 * Math.PI);
+      ctx.fillStyle = '#090A0F';
+      ctx.fill();
+      ctx.lineWidth = 5;
+      ctx.strokeStyle = '#FFFFFF';
+      ctx.stroke();
+    }
+
+    function loadPreset(key, btn) {
+      if (isSpinning) return;
+      document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+      if (btn) btn.classList.add('active');
+      wheelOptions = [...PRESETS[key]];
+      localStorage.setItem('savedWheel', JSON.stringify(wheelOptions));
+      document.getElementById('wheelResult').textContent = 'Hazır! Çarkı çevir.';
+      drawWheel();
+    }
+
+    function addWheelOption() {
+      const input = document.getElementById('newOptionInput');
+      const val = input.value.trim();
+      if (!val || isSpinning) return;
+      wheelOptions.push(val);
+      localStorage.setItem('savedWheel', JSON.stringify(wheelOptions));
+      input.value = '';
+      drawWheel();
+    }
+
+    function clearWheelOptions() {
+      if (isSpinning) return;
+      wheelOptions = ['Seçenek 1', 'Seçenek 2'];
+      localStorage.setItem('savedWheel', JSON.stringify(wheelOptions));
+      drawWheel();
+    }
+
+    function spinWheel() {
+      if (isSpinning || wheelOptions.length < 2) return;
+      isSpinning = true;
+      document.getElementById('wheelResult').textContent = 'Dönüyor...';
+
+      const spinDuration = 3800;
+      const startAngle = currentAngle;
+      const totalRotation = (Math.PI * 2 * (6 + Math.random() * 5));
+      const startTime = performance.now();
+      const sliceAngle = (2 * Math.PI) / wheelOptions.length;
+      let lastTickIndex = -1;
+
+      function animate(now) {
+        const elapsed = now - startTime;
+        const progress = Math.min(elapsed / spinDuration, 1);
+        const easeOut = 1 - Math.pow(1 - progress, 4);
+
+        currentAngle = startAngle + totalRotation * easeOut;
+        drawWheel();
+
+        const normalizedAngle = (1.5 * Math.PI - (currentAngle % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+        const currentSliceIndex = Math.floor(normalizedAngle / sliceAngle);
+        if (currentSliceIndex !== lastTickIndex) {
+          playTone(620, 0.025, 'triangle', 0.14);
+          lastTickIndex = currentSliceIndex;
+        }
+
+        if (progress < 1) {
+          requestAnimationFrame(animate);
+        } else {
+          isSpinning = false;
+          const winner = wheelOptions[currentSliceIndex];
+          document.getElementById('wheelResult').textContent = '🎉 ' + winner;
+          playWinSound();
+        }
+      }
+
+      requestAnimationFrame(animate);
+    }
+
+    drawWheel();
+
+    /* ==========================================
+       4. YAZI-TURA & TEK/ÇİFT ZAR (NOKTALI GÖRÜNÜM)
+       ========================================== */
+    let coinFlipping = false;
+    let diceCount = 2; // Varsayılan çift zar
+
+    // 3x3 zar ızgarasında hangi sayı için hangi noktaların (0..8) yanacağı
+    const PIP_PATTERNS = {
+      1: [4],
+      2: [0, 8],
+      3: [0, 4, 8],
+      4: [0, 2, 6, 8],
+      5: [0, 2, 4, 6, 8],
+      6: [0, 2, 3, 5, 6, 8]
+    };
+
+    function initDieDOM(dieEl) {
+      dieEl.innerHTML = '';
+      for (let i = 0; i < 9; i++) {
+        const pip = document.createElement('div');
+        pip.className = `pip pos-${i}`;
+        dieEl.appendChild(pip);
+      }
+    }
+
+    function renderDieFace(dieEl, val) {
+      dieEl.setAttribute('data-val', val);
+      const pips = dieEl.querySelectorAll('.pip');
+      const activeIndices = PIP_PATTERNS[val] || [];
+      pips.forEach((p, idx) => {
+        if (activeIndices.includes(idx)) {
+          p.classList.add('show');
+        } else {
+          p.classList.remove('show');
+        }
+      });
+    }
+
+    initDieDOM(document.getElementById('die1'));
+    initDieDOM(document.getElementById('die2'));
+    renderDieFace(document.getElementById('die1'), 6);
+    renderDieFace(document.getElementById('die2'), 6);
+
+    function setDiceCount(count) {
+      diceCount = count;
+      playTone(400, 0.04, 'sine', 0.1);
+      document.getElementById('btnSingleDie').classList.toggle('active', count === 1);
+      document.getElementById('btnDoubleDie').classList.toggle('active', count === 2);
+
+      const die2 = document.getElementById('die2');
+      if (count === 1) {
+        die2.classList.add('hidden');
+        const v1 = parseInt(document.getElementById('die1').getAttribute('data-val'), 10);
+        document.getElementById('diceTotalText').textContent = `Sonuç: ${v1}`;
+      } else {
+        die2.classList.remove('hidden');
+        const v1 = parseInt(document.getElementById('die1').getAttribute('data-val'), 10);
+        const v2 = parseInt(die2.getAttribute('data-val'), 10);
+        document.getElementById('diceTotalText').textContent = `Toplam: ${v1 + v2} (${v1} - ${v2})`;
+      }
+    }
+
+    function flipCoin() {
+      if (coinFlipping) return;
+      coinFlipping = true;
+      const coin = document.getElementById('coinBox');
+      coin.style.transform = 'rotateY(1080deg) scale(1.15)';
+      playTone(880, 0.12, 'sine', 0.2);
+
+      setTimeout(() => {
+        const res = Math.random() < 0.5 ? 'YAZI' : 'TURA';
+        coin.textContent = res;
+        coin.style.transform = 'rotateY(0deg) scale(1)';
+        playWinSound();
+        coinFlipping = false;
+      }, 600);
+    }
+
+    function rollDice() {
+      const d1 = document.getElementById('die1');
+      const d2 = document.getElementById('die2');
+
+      d1.style.transform = 'rotate(25deg) scale(0.82)';
+      if (diceCount === 2) d2.style.transform = 'rotate(-25deg) scale(0.82)';
+      playTone(280, 0.08, 'square', 0.15);
+
+      setTimeout(() => {
+        const v1 = Math.floor(Math.random() * 6) + 1;
+        const v2 = Math.floor(Math.random() * 6) + 1;
+
+        renderDieFace(d1, v1);
+        d1.style.transform = 'rotate(0deg) scale(1)';
+
+        if (diceCount === 2) {
+          renderDieFace(d2, v2);
+          d2.style.transform = 'rotate(0deg) scale(1)';
+          document.getElementById('diceTotalText').textContent =
+            v1 === v2 ? `🔥 ÇİFT GELDİ! (${v1} - ${v2}) • Toplam: ${v1 + v2}` : `Toplam: ${v1 + v2} (${v1} - ${v2})`;
+        } else {
+          document.getElementById('diceTotalText').textContent = `Sonuç: ${v1}`;
+        }
+
+        playWinSound();
+      }, 320);
+    }
+  </script>
+</body>
+</html>
